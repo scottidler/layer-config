@@ -25,7 +25,14 @@ fn is_option_type(ty: &Type) -> bool {
 
 fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
     let struct_name = &ast.ident;
-    let layered_config_opts_ident = format_ident!("LayeredConfigInternal");
+    let layered_config_internal_ident = format_ident!("LayeredConfigInternal");
+
+    let layered_config_trait = quote! {
+        trait LayeredConfig: Sized {
+            fn config() -> Result<Self, Box<dyn std::error::Error>>;
+            //fn config_from(args: &[String]) -> Result<Self, Box<dyn std::error::Error>>;
+        }
+    };
 
     let fields = match &ast.data {
         Data::Struct(data) => match &data.fields {
@@ -60,12 +67,6 @@ fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
             pub #name: #option_ty,
         }
     });
-
-    let layered_config_trait = quote! {
-        trait LayeredConfig: Sized {
-            fn config() -> Result<Self, Box<dyn std::error::Error>>;
-        }
-    };
 
     let merge_function = {
         let field_merges = fields.named.iter().map(|field| {
@@ -159,11 +160,11 @@ fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
     let layered_config_opts_impl = quote! {
         #[derive(Clone, Debug, Default, serde::Deserialize, clap::Parser)]
         #[serde(rename_all = "kebab-case")]
-        struct #layered_config_opts_ident {
+        struct #layered_config_internal_ident {
             #(#layered_config_opts_fields)*
         }
 
-        impl #layered_config_opts_ident {
+        impl #layered_config_internal_ident {
             #merge_function
             #resolve_function
             #from_env_function
@@ -179,8 +180,8 @@ fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
     });
 
     let from_impl = quote! {
-        impl From<#layered_config_opts_ident> for #struct_name {
-            fn from(mut layered_config_internal: #layered_config_opts_ident) -> Self {
+        impl From<#layered_config_internal_ident> for #struct_name {
+            fn from(mut layered_config_internal: #layered_config_internal_ident) -> Self {
                 Self {
                     #(#from_impl_fields,)*
                 }
@@ -204,13 +205,13 @@ fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
                 impl LayeredConfig for #struct_name {
                     fn config() -> Result<Self, Box<dyn std::error::Error>> {
                         let args: Vec<String> = std::env::args().collect();
-                        let default_value_opts = #layered_config_opts_ident::parse_from([] as [&str; 0]);
-                        let cli_opts = #layered_config_opts_ident::parse_from(args.as_slice());
-                        let yml_opts = #layered_config_opts_ident::load_yaml(cli_opts.config.as_deref(), &default_value_opts);
-                        let precedence_opts = #layered_config_opts_ident::merge(&default_value_opts, &yml_opts);
-                        let env_opts = #layered_config_opts_ident::from_env();
-                        let precedence_opts = #layered_config_opts_ident::merge(&precedence_opts, &env_opts);
-                        let final_opts = #layered_config_opts_ident::resolve(&cli_opts, &default_value_opts, &precedence_opts);
+                        let default_value_opts = #layered_config_internal_ident::parse_from([] as [&str; 0]);
+                        let cli_opts = #layered_config_internal_ident::parse_from(args.as_slice());
+                        let yml_opts = #layered_config_internal_ident::load_yaml(cli_opts.config.as_deref(), &default_value_opts);
+                        let precedence_opts = #layered_config_internal_ident::merge(&default_value_opts, &yml_opts);
+                        let env_opts = #layered_config_internal_ident::from_env();
+                        let precedence_opts = #layered_config_internal_ident::merge(&precedence_opts, &env_opts);
+                        let final_opts = #layered_config_internal_ident::resolve(&cli_opts, &default_value_opts, &precedence_opts);
                         Ok(final_opts.into())
                     }
                 }
@@ -220,11 +221,11 @@ fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
                 impl LayeredConfig for #struct_name {
                     fn parse() -> Result<Self, Box<dyn std::error::Error>> {
                         let args: Vec<String> = std::env::args().collect();
-                        let default_value_opts = #layered_config_opts_ident::parse_from([] as [&str; 0]);
-                        let cli_opts = #layered_config_opts_ident::parse_from(args.as_slice());
-                        let env_opts = #layered_config_opts_ident::from_env();
-                        let precedence_opts = #layered_config_opts_ident::merge(&default_value_opts, &env_opts);
-                        let final_opts = #layered_config_opts_ident::resolve(&cli_opts, &default_value_opts, &precedence_opts);
+                        let default_value_opts = #layered_config_internal_ident::parse_from([] as [&str; 0]);
+                        let cli_opts = #layered_config_internal_ident::parse_from(args.as_slice());
+                        let env_opts = #layered_config_internal_ident::from_env();
+                        let precedence_opts = #layered_config_internal_ident::merge(&default_value_opts, &env_opts);
+                        let final_opts = #layered_config_internal_ident::resolve(&cli_opts, &default_value_opts, &precedence_opts);
                         Ok(final_opts.into())
                     }
                 }
