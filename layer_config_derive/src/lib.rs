@@ -20,7 +20,7 @@ fn is_option_type(ty: &Type) -> bool {
 
 fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
     let struct_name = &ast.ident;
-    let layered_config_internal_ident = format_ident!("LayeredConfigInternal");
+    let layered_config_internal_ident = format_ident!("{}LayeredConfigInternal", struct_name);
 
     let use_layered_config_trait = quote! {
         use layer_config::LayeredConfig;
