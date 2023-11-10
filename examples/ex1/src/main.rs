@@ -1,8 +1,3 @@
-#![cfg_attr(
-    debug_assertions,
-    allow(unused_imports, unused_variables, unused_mut, dead_code, unused_assignments)
-)]
-
 use clap::Parser;
 use layer_config::LayerConfig;
 use serde::{Deserialize, Serialize};
@@ -23,7 +18,7 @@ struct Opts {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let opts = Opts::config()?;
+    let opts = Opts::resolve()?;
     println!("opts={opts:?}");
     Ok(())
 }

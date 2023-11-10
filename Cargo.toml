@@ -1,17 +1,9 @@
-[package]
-name = "layer-config"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-proc-macro = true
-
-[dev-dependencies]
-clap = { version = "4.4.7", features = ["derive"] }                                                                                                       
-serde = { version = "1.0.190", features = ["derive"] }                                                                                                    
-serde_yaml = "0.9.27"
-
-[dependencies]
-proc-macro2 = "1.0.69"
-quote = "1.0.33"
-syn = { version = "2.0.38", features = ["full"] }
+[workspace]
+members = [
+    "layer_config",
+    "layer_config_derive",
+]
+exclude = [
+    "examples/ex1",
+]
+resolver = "2"

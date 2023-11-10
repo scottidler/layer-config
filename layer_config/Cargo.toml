@@ -1,0 +1,7 @@
+[package]
+name = "layer_config"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+layer_config_derive = { path = "../layer_config_derive" }

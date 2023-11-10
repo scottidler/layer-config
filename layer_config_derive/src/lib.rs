@@ -1,11 +1,6 @@
-#![cfg_attr(
-    debug_assertions,
-    allow(unused_imports, unused_variables, unused_mut, dead_code, unused_assignments)
-)]
-
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, Data, DeriveInput, Fields, Ident, Type};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, Type};
 
 #[proc_macro_derive(LayerConfig)]
 pub fn layer_config_derive(input: TokenStream) -> TokenStream {
@@ -27,11 +22,8 @@ fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
     let struct_name = &ast.ident;
     let layered_config_internal_ident = format_ident!("LayeredConfigInternal");
 
-    let layered_config_trait = quote! {
-        trait LayeredConfig: Sized {
-            fn resolve() -> Result<Self, Box<dyn std::error::Error>>;
-            fn resolve_from<T: AsRef<[String]>>(args: T) -> Result<Self, Box<dyn std::error::Error>>;
-        }
+    let use_layered_config_trait = quote! {
+        use layer_config::LayeredConfig;
     };
 
     let fields = match &ast.data {
@@ -202,7 +194,7 @@ fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
         });
         if has_config_field {
             quote! {
-                impl LayeredConfig for #struct_name {
+                impl layer_config::LayeredConfig for #struct_name {
                     fn resolve() -> Result<Self, Box<dyn std::error::Error>> {
                         let args: Vec<String> = std::env::args().collect();
                         #struct_name::resolve_from(args)
@@ -222,7 +214,7 @@ fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
             }
         } else {
             quote! {
-                impl LayeredConfig for #struct_name {
+                impl layer_config::LayeredConfig for #struct_name {
                     fn resolve() -> Result<Self, Box<dyn std::error::Error>> {
                         let args: Vec<String> = std::env::args().collect();
                         #struct_name::resolve_from(args)
@@ -242,7 +234,7 @@ fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
     };
 
     quote! {
-        #layered_config_trait
+        #use_layered_config_trait
         #layered_config_internal_impl
         #from_impl
         #config_impl
