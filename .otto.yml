@@ -1,0 +1,94 @@
+otto:
+  api: 1
+  tasks: [ci]
+  envs:
+    VERSION: "$(git describe --tags --always --dirty 2>/dev/null || echo 'dev')"
+
+tasks:
+  # Whitespace linting
+  lint:
+    help: "Run whitespace linting"
+    bash: |
+      whitespace -r
+
+  # Code quality checks
+  check:
+    help: "Run all quality checks (compile, clippy, format)"
+    bash: |
+      echo "=== Checking compilation ==="
+      cargo check --workspace --all-targets --all-features
+      echo ""
+      echo "=== Running Clippy ==="
+      cargo clippy --workspace --all-targets --all-features -- -D warnings
+      echo ""
+      echo "=== Checking format ==="
+      cargo fmt --all --check
+      echo ""
+      echo "✅ All checks passed!"
+
+  # Run tests
+  test:
+    help: "Run all tests"
+    bash: |
+      cargo test --workspace --all-features
+
+  # Code coverage with llvm-cov
+  cov:
+    help: "Run tests with coverage via llvm-cov (use --fail-under N for threshold)"
+    params:
+      --fail-under:
+        default: "0"
+        help: "Minimum line coverage percentage (0 = no threshold)"
+    bash: |
+      echo "🧪 Running tests with coverage..."
+      if [ "${fail_under}" != "0" ]; then
+        if cargo llvm-cov --workspace --all-features --html -q --fail-under-lines "${fail_under}"; then
+          echo ""
+          echo "✅ Coverage meets ${fail_under}% threshold"
+          echo "📊 Coverage report: target/llvm-cov/html/index.html"
+        else
+          echo ""
+          echo "❌ Coverage is below ${fail_under}% threshold"
+          echo "📊 Coverage report: target/llvm-cov/html/index.html"
+          exit 1
+        fi
+      else
+        cargo llvm-cov --workspace --all-features --html -q
+        echo ""
+        echo "✅ Coverage report: target/llvm-cov/html/index.html"
+      fi
+
+  # Full CI pipeline
+  ci:
+    help: "Full CI pipeline (lint + check + test in parallel)"
+    before: [lint, check, test]
+    bash: |
+      echo "✅ All CI checks passed!"
+
+  # Build release binaries
+  build:
+    help: "Build release binaries for all workspace members"
+    bash: |
+      cargo build --release --workspace
+      echo "✅ Release build complete for all workspace members"
+
+  # Clean build artifacts
+  clean:
+    help: "Clean build artifacts"
+    bash: |
+      cargo clean
+      echo "✅ Build artifacts cleaned"
+
+  # Install workspace binaries locally
+  install:
+    help: "Install all workspace binaries locally via cargo"
+    bash: |
+      for manifest in */Cargo.toml; do
+        if [ -f "$manifest" ]; then
+          dir=$(dirname "$manifest")
+          echo "Installing from $dir..."
+          cargo install --path "$dir" || echo "⚠️  Could not install $dir (might be a library)"
+        fi
+      done
+      echo "✅ Workspace binaries installed to ~/.cargo/bin"
+
