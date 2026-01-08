@@ -32,31 +32,126 @@ tasks:
     bash: |
       cargo test --workspace --all-features
 
-  # Code coverage with llvm-cov
+  # Run coverage tests and output data
   cov:
-    help: "Run tests with coverage via llvm-cov (use --fail-under N for threshold)"
+    help: "Run tests with coverage via llvm-cov"
+    after: [cov-report]
+    bash: |
+      echo "Running tests with coverage..."
+
+      JSON_FILE="$OTTO_TASK_DIR/coverage.json"
+
+      # Run coverage
+      TEST_FAILED=0
+      if ! cargo llvm-cov --all-features --json --output-path "$JSON_FILE" 2>&1; then
+        TEST_FAILED=1
+      fi
+
+      # Validate JSON was created
+      if [ ! -s "$JSON_FILE" ] || ! jq -e '.data[0].totals' "$JSON_FILE" >/dev/null 2>&1; then
+        echo "Tests failed - no coverage data generated"
+        exit 1
+      fi
+
+      # Generate HTML report
+      cargo llvm-cov report --html --output-dir target/llvm-cov/html >/dev/null 2>&1 || true
+
+      # Output data for cov-report
+      otto_set_output "json_path" "$JSON_FILE"
+      otto_set_output "test_failed" "$TEST_FAILED"
+      otto_set_output "lines_pct" "$(jq -r '.data[0].totals.lines.percent // 0' "$JSON_FILE")"
+      otto_set_output "lines_cov" "$(jq -r '.data[0].totals.lines.covered // 0' "$JSON_FILE")"
+      otto_set_output "lines_tot" "$(jq -r '.data[0].totals.lines.count // 0' "$JSON_FILE")"
+      otto_set_output "funcs_pct" "$(jq -r '.data[0].totals.functions.percent // 0' "$JSON_FILE")"
+      otto_set_output "funcs_cov" "$(jq -r '.data[0].totals.functions.covered // 0' "$JSON_FILE")"
+      otto_set_output "funcs_tot" "$(jq -r '.data[0].totals.functions.count // 0' "$JSON_FILE")"
+      otto_set_output "regions_pct" "$(jq -r '.data[0].totals.regions.percent // 0' "$JSON_FILE")"
+
+  # Display coverage report (runs after cov)
+  cov-report:
+    help: "Display coverage report"
     params:
       --fail-under:
         default: "0"
         help: "Minimum line coverage percentage (0 = no threshold)"
+      --json:
+        default: "false"
+        help: "Output raw JSON coverage data"
+      --details:
+        default: "false"
+        help: "Show detailed per-file coverage"
     bash: |
-      echo "🧪 Running tests with coverage..."
-      if [ "${fail_under}" != "0" ]; then
-        if cargo llvm-cov --workspace --all-features --html -q --fail-under-lines "${fail_under}"; then
-          echo ""
-          echo "✅ Coverage meets ${fail_under}% threshold"
-          echo "📊 Coverage report: target/llvm-cov/html/index.html"
-        else
-          echo ""
-          echo "❌ Coverage is below ${fail_under}% threshold"
-          echo "📊 Coverage report: target/llvm-cov/html/index.html"
-          exit 1
-        fi
-      else
-        cargo llvm-cov --workspace --all-features --html -q
-        echo ""
-        echo "✅ Coverage report: target/llvm-cov/html/index.html"
+      # Colors provided by otto builtins: RED, GREEN, YELLOW, BLUE, CYAN, MAGENTA, BOLD, DIM, NC
+
+      color_pct() {
+        local pct=$1
+        local int_pct=${pct%.*}
+        if [ "$int_pct" -ge 80 ]; then echo -e "${GREEN}${pct}%${NC}"
+        elif [ "$int_pct" -ge 60 ]; then echo -e "${YELLOW}${pct}%${NC}"
+        else echo -e "${RED}${pct}%${NC}"; fi
+      }
+
+      # Get data from cov task
+      JSON_PATH=$(otto_get_input "cov.json_path")
+      TEST_FAILED=$(otto_get_input "cov.test_failed")
+      LINES_PCT=$(printf "%.1f" "$(otto_get_input "cov.lines_pct")")
+      LINES_COV=$(otto_get_input "cov.lines_cov")
+      LINES_TOT=$(otto_get_input "cov.lines_tot")
+      FUNCS_PCT=$(printf "%.1f" "$(otto_get_input "cov.funcs_pct")")
+      FUNCS_COV=$(otto_get_input "cov.funcs_cov")
+      FUNCS_TOT=$(otto_get_input "cov.funcs_tot")
+      REGIONS_PCT=$(printf "%.1f" "$(otto_get_input "cov.regions_pct")")
+
+      # Raw JSON mode
+      if [ "${json}" = "true" ]; then
+        cat "$JSON_PATH"
+        exit $TEST_FAILED
       fi
+
+      # Detailed per-file coverage
+      if [ "${details}" = "true" ]; then
+        echo -e "${BOLD}${CYAN}Per-file Coverage:${NC}"
+        echo -e "${DIM}────────────────────────────────────────────────────────${NC}"
+        jq -r '.data[0].files[] | "\(.filename)|\(.summary.lines.percent // 0)|\(.summary.lines.covered // 0)|\(.summary.lines.count // 0)"' "$JSON_PATH" | \
+        sort -t'|' -k2 -n | while IFS='|' read -r file pct covered total; do
+          display=$(echo "$file" | sed 's|.*/src/||')
+          [ ${#display} -gt 40 ] && display="...${display: -37}"
+          int_pct=${pct%.*}
+          if [ "$int_pct" -ge 80 ]; then color=$GREEN
+          elif [ "$int_pct" -ge 60 ]; then color=$YELLOW
+          else color=$RED; fi
+          printf "  %-42s %b%6.1f%%%b %b(%d/%d)%b\n" "$display" "$color" "$pct" "$NC" "$DIM" "$covered" "$total" "$NC"
+        done
+        echo -e "${DIM}────────────────────────────────────────────────────────${NC}"
+        echo ""
+      fi
+
+      # Summary
+      echo -e "${BOLD}${CYAN}Coverage Summary${NC}"
+      echo -e "${DIM}────────────────────────────────────────${NC}"
+      echo -e "  ${BOLD}Lines:${NC}     $(color_pct $LINES_PCT)  ${DIM}(${LINES_COV}/${LINES_TOT})${NC}"
+      echo -e "  ${BOLD}Functions:${NC} $(color_pct $FUNCS_PCT)  ${DIM}(${FUNCS_COV}/${FUNCS_TOT})${NC}"
+      echo -e "  ${BOLD}Regions:${NC}   $(color_pct $REGIONS_PCT)"
+      echo -e "${DIM}────────────────────────────────────────${NC}"
+      echo ""
+
+      # Threshold check
+      THRESHOLD_FAILED=0
+      if [ "${fail_under}" != "0" ]; then
+        LINES_INT=${LINES_PCT%.*}
+        THRESHOLD_INT=${fail_under%.*}
+        if [ "$LINES_INT" -lt "$THRESHOLD_INT" ]; then
+          THRESHOLD_FAILED=1
+          echo -e "${RED}${BOLD}✗ Coverage ${LINES_PCT}% is below ${fail_under}% threshold${NC}"
+        else
+          echo -e "${GREEN}${BOLD}✓ Coverage ${LINES_PCT}% meets ${fail_under}% threshold${NC}"
+        fi
+        echo ""
+      fi
+
+      echo -e "${BLUE}Report:${NC} target/llvm-cov/html/index.html"
+
+      [ "$TEST_FAILED" = "1" ] || [ "$THRESHOLD_FAILED" = "1" ] && exit 1 || true
 
   # Full CI pipeline
   ci:
