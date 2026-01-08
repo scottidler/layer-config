@@ -1,5 +1,5 @@
 use clap::Parser;
-use layer_config::LayerConfig;
+use layer_config::{LayerConfig, LayeredConfig};
 use serde::{Deserialize, Serialize};
 
 #[derive(Parser, Deserialize, Serialize, Debug, LayerConfig)]

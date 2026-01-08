@@ -22,9 +22,8 @@ fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
     let struct_name = &ast.ident;
     let layered_config_internal_ident = format_ident!("{}LayeredConfigInternal", struct_name);
 
-    let use_layered_config_trait = quote! {
-        use layer_config::LayeredConfig;
-    };
+    // Note: We don't import LayeredConfig here - it's already in scope from layer_config crate
+    // Using full path layer_config::LayeredConfig in the impl blocks avoids re-import issues
 
     let fields = match &ast.data {
         Data::Struct(data) => match &data.fields {
@@ -234,7 +233,6 @@ fn impl_layered_config(ast: &DeriveInput) -> proc_macro2::TokenStream {
     };
 
     quote! {
-        #use_layered_config_trait
         #layered_config_internal_impl
         #from_impl
         #config_impl
