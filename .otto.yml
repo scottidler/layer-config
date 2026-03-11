@@ -43,7 +43,7 @@ tasks:
 
       # Run coverage
       TEST_FAILED=0
-      if ! cargo llvm-cov --all-features --json --output-path "$JSON_FILE" 2>&1; then
+      if ! cargo llvm-cov --workspace --all-features --json --output-path "$JSON_FILE" 2>&1; then
         TEST_FAILED=1
       fi
 
