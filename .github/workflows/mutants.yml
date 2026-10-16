@@ -1,0 +1,14 @@
+name: mutants
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  mutants:
+    uses: tatari-tv/github-actions-public/.github/workflows/mutants.yml@v2.2.0
