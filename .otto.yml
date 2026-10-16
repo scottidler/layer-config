@@ -212,7 +212,12 @@ tasks:
       if [ -n "${diff}" ]; then
         # Copy first: `--diff <(git diff)` is a pipe, readable once and never `-s`.
         diff_copy=$(mktemp)
+        trap 'rm -f "$diff_copy"' EXIT
         cat "${diff}" > "$diff_copy"
+        if [ -s "$diff_copy" ] && ! grep -q '^+++ ' "$diff_copy"; then
+          echo "mutants: ${diff} is not a unified diff (no '+++' file header)" >&2
+          exit 2
+        fi
         # Every new-file header must be `+++ b/` (or /dev/null): one other prefix
         # silently drops that file from the mutant set.
         bad=$(grep '^+++ ' "$diff_copy" | grep -v -e '^+++ b/' -e '^+++ /dev/null' || true)
