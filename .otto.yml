@@ -220,7 +220,22 @@ tasks:
         fi
         # Every new-file header must be `+++ b/` (or /dev/null): one other prefix
         # silently drops that file from the mutant set.
-        bad=$(grep '^+++ ' "$diff_copy" | grep -v -e '^+++ b/' -e '^+++ /dev/null' || true)
+        bad=$(awk '
+          # "@@ -12,3 +12,4 @@": the hunk body is the next 3 old and 4 new lines (count defaults to 1)
+          /^@@ / {
+            split($2, old_range, ","); old_left = (2 in old_range) ? old_range[2] : 1
+            split($3, new_range, ","); new_left = (2 in new_range) ? new_range[2] : 1
+            next
+          }
+          # Inside a hunk: consume the line, so "+++ ..." content is never read as a header
+          old_left > 0 || new_left > 0 {
+            if (/^ /)  { old_left--; new_left-- }
+            if (/^-/)  { old_left-- }
+            if (/^\+/) { new_left-- }
+            next
+          }
+          /^\+\+\+ / { print }
+        ' "$diff_copy" | grep -v -e '^+++ b/' -e '^+++ /dev/null' || true)
         if [ -n "$bad" ]; then
           echo "mutants: ${diff} has headers without the 'b/' prefix (e.g. '$(head -n1 <<< "$bad")'); regenerate it with 'git -c diff.mnemonicPrefix=false diff' (other prefixes match nothing and test nothing)" >&2
           exit 2
