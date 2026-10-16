@@ -11,4 +11,4 @@ permissions:
 
 jobs:
   mutants:
-    uses: tatari-tv/github-actions-public/.github/workflows/mutants.yml@v2.2.0
+    uses: tatari-tv/github-actions-public/.github/workflows/mutants.yml@v2.3.0
