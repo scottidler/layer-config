@@ -175,7 +175,7 @@ tasks:
       # A stale `rc` from a prior run must not outlive a refused or failed run below.
       rm -f rc
       MUTANTS_VERSION="${MUTANTS_VERSION:-27.1.0}"
-      have=$(cargo mutants --version 2>/dev/null | awk '{print $2}')
+      have=$(cargo mutants --version 2>/dev/null | awk '{print $2}' || true)
       if [ "$have" != "$MUTANTS_VERSION" ]; then
         echo "installing cargo-mutants $MUTANTS_VERSION (found: ${have:-none})"
         cargo install cargo-mutants --version "$MUTANTS_VERSION" --locked
@@ -210,11 +210,17 @@ tasks:
       # prefixes, so a diff.mnemonicPrefix diff (i/ w/) lists 0 mutants and exits 0, a false green.
       SCOPE_ARGS=()
       if [ -n "${diff}" ]; then
-        if [ -s "${diff}" ] && ! grep -q '^+++ b/' "${diff}"; then
-          echo "mutants: ${diff} has no '+++ b/' header; regenerate it with 'git -c diff.mnemonicPrefix=false diff' (other prefixes match nothing and test nothing)" >&2
+        # Copy first: `--diff <(git diff)` is a pipe, readable once and never `-s`.
+        diff_copy=$(mktemp)
+        cat "${diff}" > "$diff_copy"
+        # Every new-file header must be `+++ b/` (or /dev/null): one other prefix
+        # silently drops that file from the mutant set.
+        bad=$(grep '^+++ ' "$diff_copy" | grep -v -e '^+++ b/' -e '^+++ /dev/null' || true)
+        if [ -n "$bad" ]; then
+          echo "mutants: ${diff} has headers without the 'b/' prefix (e.g. '$(head -n1 <<< "$bad")'); regenerate it with 'git -c diff.mnemonicPrefix=false diff' (other prefixes match nothing and test nothing)" >&2
           exit 2
         fi
-        SCOPE_ARGS=(--in-diff "${diff}")
+        SCOPE_ARGS=(--in-diff "$diff_copy")
       fi
 
       # round-robin: the default `slice` gives ceil(total/N) chunks, so a shard can be empty.
